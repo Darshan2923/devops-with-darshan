@@ -1,7 +1,4 @@
 Parameters:
-  LatestAmiId:
-    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
-    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64_gp2'
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
     Description: "Name of an existing SSH KeyPair to access the instance"
@@ -16,13 +13,13 @@ Parameters:
 
 Resources:
   EC2Instance:
-    Type: AWS::EC2::instance
+    Type: AWS::EC2::Instance
     Properties:
       KeyName: !Ref KeyName
       InstanceType: "t3.micro"
-      ImageId: !Ref LatestAmiId
+      ImageId: ami-068c0051b15cdb816
       IamInstanceProfile: !Ref SessionManagerInstanceProfile
-      SecurityGroups:
+      SecurityGroupIds:
         - !Ref InstanceSecurityGroup
   InstanceSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
@@ -50,7 +47,7 @@ Resources:
             Action:
               - 'sts:AssumeRole'
       Path: /
-      ManagePolicyArns:
+      ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   SessionManagerInstanceProfile:
     Type: 'AWS::IAM::InstanceProfile'

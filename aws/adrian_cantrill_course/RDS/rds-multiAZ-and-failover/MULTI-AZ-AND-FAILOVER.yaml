@@ -1,0 +1,129 @@
+Description:  
+  AWS CloudFormation Template for a WordPress and RDS stack.
+  This template installs a WordPress instance connected to an RDS MySQL database.
+  **WARNING** This template creates AWS resources. You will be billed for the 
+  AWS resources used if you create a stack from this template.
+Parameters:
+  VPCID:
+    Type: 'AWS::EC2::VPC::Id'
+    Description: Select the VPC where you want to deploy the stack.
+  PublicSubnet:
+    Type: 'AWS::EC2::Subnet::Id'
+    Description: Select a public subnet for the WordPress instance.
+  PrivateSubnetA:
+    Type: 'AWS::EC2::Subnet::Id'
+    Description: Select the first private subnet for the RDS DB instance.
+  PrivateSubnetB:
+    Type: 'AWS::EC2::Subnet::Id'
+    Description: Select the second private subnet for the RDS DB instance.
+  DBName:
+    Default: a4lwordpress
+    Description: The WordPress database name
+    Type: String
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+  DBUser:
+    NoEcho: 'true'
+    Description: The WordPress database admin account username
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+  DBPassword:
+    NoEcho: 'true'
+    Description: The WordPress database admin account password
+    Type: String
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+  DBRootPassword:
+    NoEcho: 'true'
+    Description: MySQL Root Password
+    Type: String
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+  InstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t2.micro
+      - t3.small
+    ConstraintDescription: must be a valid EC2 instance type.
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+Resources:
+  DBSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: Subnets available for the RDS DB Instance
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+  WebSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable HTTP access via port 80
+      VpcId: !Ref VPCID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+  DBSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable MySQL access from the WebServer
+      VpcId: !Ref VPCID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref WebSecurityGroup
+  RDSInstance:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      DBName: !Ref DBName
+      Engine: MySQL
+      MasterUsername: !Ref DBUser
+      MasterUserPassword: !Ref DBPassword
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: '20'
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+      MultiAZ: false
+  WordPressInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref WebSecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          yum update -y
+          amazon-linux-extras install php7.4 -y
+          yum install -y httpd mariadb-server
+          systemctl start httpd
+          systemctl enable httpd
+          cd /var/www/html
+          wget https://wordpress.org/latest.tar.gz
+          tar -xzf latest.tar.gz
+          cp -r wordpress/* .
+          cp wp-config-sample.php wp-config.php
+          sed -i "s/database_name_here/${DBName}/g" wp-config.php
+          sed -i "s/username_here/${DBUser}/g" wp-config.php
+          sed -i "s/password_here/${DBPassword}/g" wp-config.php
+          sed -i "s/localhost/${RDSInstance.Endpoint.Address}/g" wp-config.php
+          chown -R apache:apache /var/www/html
+Outputs:
+  WebsiteURL:
+    Value: !Sub 'http://${WordPressInstance.PublicIp}'
+    Description: URL for the WordPress site

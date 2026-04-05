@@ -1,0 +1,4 @@
+Description: Basic S3 bucket example
+Resources:
+  animalpics:
+    Type: AWS::S3::Bucket
